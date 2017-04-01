@@ -20,7 +20,6 @@
 struct Options
 {
   JSONCPP_STRING path;
-  //Json::Features features;
   Json::CharReaderBuilder builder;
   bool parseOnly;
   typedef JSONCPP_STRING (*writeFuncType)(Json::Value const&);

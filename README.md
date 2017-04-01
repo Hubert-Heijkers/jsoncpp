@@ -1,6 +1,6 @@
 # HEALTH WARNING: WORK IN PROGRESS
 
-If you are looking for general CPP keep in mind there is a reason I forked it and I'm still working on it!
+If you are looking for JsonCpp as you know it this fork might not have everything what you need, keep in mind there is a reason I forked it;-).
 
 This is what I did to the code thus far:
 

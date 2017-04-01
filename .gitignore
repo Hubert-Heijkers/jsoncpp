@@ -14,9 +14,9 @@
 #/include/json/version.h
 
 # MSVC project files:
-#*.sln
-#*.vcxproj
-#*.filters
+*.sln
+*.vcxproj
+*.filters
 *.user
 *.sdf
 *.opensdf
