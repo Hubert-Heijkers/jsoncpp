@@ -14,13 +14,15 @@
 #/include/json/version.h
 
 # MSVC project files:
-*.sln
-*.vcxproj
-*.filters
+#*.sln
+#*.vcxproj
+#*.filters
 *.user
 *.sdf
 *.opensdf
 *.suo
+*.VC.db
+/.vs/
 
 # MSVC build files:
 *.lib

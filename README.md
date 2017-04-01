@@ -1,3 +1,17 @@
+# HEALTH WARNING: WORK IN PROGRESS
+
+If you are looking for general CPP keep in mind there is a reason I forked it and I'm still working on it!
+
+This is what I did to the code thus far:
+
+* Removed the deprecated Reader class
+
+This is what I'm planning to do:
+
+* Add support for being able to stream thru a JSON document, one token at a time (details as to how I'll expose later) 
+
+Original documentation below, I'll update once I'm 'done' with my work!
+
 # JsonCpp
 
 [JSON][json-org] is a lightweight data-interchange format. It can represent

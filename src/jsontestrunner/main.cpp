@@ -10,6 +10,8 @@
 #include <algorithm> // sort
 #include <sstream>
 #include <stdio.h>
+#include <memory>
+
 
 #if defined(_MSC_VER) && _MSC_VER >= 1310
 #pragma warning(disable : 4996) // disable fopen deprecation warning
@@ -18,7 +20,8 @@
 struct Options
 {
   JSONCPP_STRING path;
-  Json::Features features;
+  //Json::Features features;
+  Json::CharReaderBuilder builder;
   bool parseOnly;
   typedef JSONCPP_STRING (*writeFuncType)(Json::Value const&);
   writeFuncType write;
@@ -140,16 +143,17 @@ printValueTree(FILE* fout, Json::Value& value, const JSONCPP_STRING& path = ".")
 static int parseAndSaveValueTree(const JSONCPP_STRING& input,
                                  const JSONCPP_STRING& actual,
                                  const JSONCPP_STRING& kind,
-                                 const Json::Features& features,
+                                 const Json::CharReaderBuilder &builder,
                                  bool parseOnly,
                                  Json::Value* root)
 {
-  Json::Reader reader(features);
-  bool parsingSuccessful = reader.parse(input.data(), input.data() + input.size(), *root);
+  JSONCPP_STRING errs;
+  std::unique_ptr<Json::CharReader> const reader(builder.newCharReader());
+  bool parsingSuccessful = reader->parse(input.data(), input.data() + input.size(), root, &errs);
   if (!parsingSuccessful) {
     printf("Failed to parse %s file: \n%s\n",
            kind.c_str(),
-           reader.getFormattedErrorMessages().c_str());
+           errs.c_str());
     return 1;
   }
   if (!parseOnly) {
@@ -224,9 +228,16 @@ static void printConfig() {
 #endif
 }
 
-static int printUsage(const char* argv[]) {
-  printf("Usage: %s [--strict] input-json-file", argv[0]);
-  return 3;
+static void printUsage(const char* argv[]) {
+  printf(
+      "Usage: %s [COMMAND]\n"
+      "\n"
+      "Commands:\n"
+      "  --json-config                  Show configuration\n"
+      "  --json-checker json-file       Reads the JSON file specified and shows any errors that might exist in it\n"
+      "  --json-writer writer json-file Reads the JSON file and writes out the values read (.actual) as well as a\n"
+      "                                 rewrite of the JSON read (.rewrite) and values read from it (.actual-rewrite)\n",
+      argv[0]);
 }
 
 static int parseCommandLine(
@@ -235,34 +246,45 @@ static int parseCommandLine(
   opts->parseOnly = false;
   opts->write = &useStyledWriter;
   if (argc < 2) {
-    return printUsage(argv);
+    printUsage(argv);
+    return -1;
   }
   int index = 1;
-  if (JSONCPP_STRING(argv[index]) == "--json-checker") {
-    opts->features = Json::Features::strictMode();
+  if (JSONCPP_STRING(argv[index]) == "--json-config") {
+      printConfig();
+      return -1;
+  }
+  else if (JSONCPP_STRING(argv[index]) == "--json-checker") {
+    opts->builder.strictMode( &opts->builder.settings_ );
     opts->parseOnly = true;
     ++index;
   }
-  if (JSONCPP_STRING(argv[index]) == "--json-config") {
-    printConfig();
-    return 3;
-  }
-  if (JSONCPP_STRING(argv[index]) == "--json-writer") {
+  else if (JSONCPP_STRING(argv[index]) == "--json-writer") {
     ++index;
-    JSONCPP_STRING const writerName(argv[index++]);
-    if (writerName == "StyledWriter") {
-      opts->write = &useStyledWriter;
-    } else if (writerName == "StyledStreamWriter") {
-      opts->write = &useStyledStreamWriter;
-    } else if (writerName == "BuiltStyledStreamWriter") {
-      opts->write = &useBuiltStyledStreamWriter;
-    } else {
-      printf("Unknown '--json-writer %s'\n", writerName.c_str());
-      return 4;
+    if (index < argc)
+    {
+      JSONCPP_STRING const writerName(argv[index++]);
+      if (writerName == "StyledWriter") {
+        opts->write = &useStyledWriter;
+      } else if (writerName == "StyledStreamWriter") {
+        opts->write = &useStyledStreamWriter;
+      } else if (writerName == "BuiltStyledStreamWriter") {
+        opts->write = &useBuiltStyledStreamWriter;
+      } else {
+        printf("Unknown '--json-writer %s'\n", writerName.c_str());
+        return -1;
+      }
     }
   }
+  else {
+    printf("No or invalid command specified.\n\n");
+    printUsage(argv);
+    return -1;
+  }
   if (index == argc || index + 1 < argc) {
-    return printUsage(argv);
+    printf("Invalid number of arguments for the specified command.\n\n");
+    printUsage(argv);
+    return -1;
   }
   opts->path = argv[index];
   return 0;
@@ -291,7 +313,7 @@ static int runTest(Options const& opts)
   Json::Value root;
   exitCode = parseAndSaveValueTree(
       input, actualPath, "input",
-      opts.features, opts.parseOnly, &root);
+      opts.builder, opts.parseOnly, &root);
   if (exitCode || opts.parseOnly) {
     return exitCode;
   }
@@ -303,7 +325,7 @@ static int runTest(Options const& opts)
   Json::Value rewriteRoot;
   exitCode = parseAndSaveValueTree(
       rewrite, rewriteActualPath, "rewrite",
-      opts.features, opts.parseOnly, &rewriteRoot);
+      opts.builder, opts.parseOnly, &rewriteRoot);
   if (exitCode) {
     return exitCode;
   }
@@ -312,11 +334,10 @@ static int runTest(Options const& opts)
 int main(int argc, const char* argv[]) {
   Options opts;
   try {
-  int exitCode = parseCommandLine(argc, argv, &opts);
-  if (exitCode != 0) {
-    printf("Failed to parse command-line.");
-    return exitCode;
-  }
+    int exitCode = parseCommandLine(argc, argv, &opts);
+    if (exitCode != 0) {
+      return exitCode;
+    }
     return runTest(opts);
   }
   catch (const std::exception& e) {
