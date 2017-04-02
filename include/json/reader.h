@@ -60,9 +60,9 @@ public:
      */
     virtual CharReader* newCharReader() const = 0;
   };  // Factory
-};  // CharReader
+};  // Reader
 
-/** \brief Build a CharReader implementation.
+/** \brief Build a Reader implementation.
 
 Usage:
 \code
@@ -133,13 +133,13 @@ public:
   /** Called by ctor, but you can use this to reset settings_.
    * \pre 'settings' != NULL (but Json::null is fine)
    * \remark Defaults:
-   * \snippet src/lib_json/json_reader.cpp CharReaderBuilderDefaults
+   * \snippet src/lib_json/json_reader.cpp ReaderBuilderDefaults
    */
   static void setDefaults(Json::Value* settings);
   /** Same as old Features::strictMode().
    * \pre 'settings' != NULL (but Json::null is fine)
    * \remark Defaults:
-   * \snippet src/lib_json/json_reader.cpp CharReaderBuilderStrictMode
+   * \snippet src/lib_json/json_reader.cpp ReaderBuilderStrictMode
    */
   static void strictMode(Json::Value* settings);
 };
