@@ -87,45 +87,39 @@ Features Features::all() { return Features(); }
 
 class OurReader {
 public:
-  OurReader(Features const& features);
-  bool parse(const char* beginDoc,
-             const char* endDoc,
-             Value& root,
-             bool collectComments = true);
-  JSONCPP_STRING getFormattedErrorMessages() const;
-  bool pushError(const Value& value, const JSONCPP_STRING& message);
-  bool pushError(const Value& value, const JSONCPP_STRING& message, const Value& extra);
-
-private:
-  OurReader(OurReader const&);  // no impl
-  void operator=(OurReader const&);  // no impl
-
-  enum TokenType {
-    tokenEndOfStream = 0,
-    tokenObjectBegin,
-    tokenObjectEnd,
-    tokenArrayBegin,
-    tokenArrayEnd,
-    tokenString,
-    tokenNumber,
-    tokenTrue,
-    tokenFalse,
-    tokenNull,
-    tokenNaN,
-    tokenPosInf,
-    tokenNegInf,
-    tokenArraySeparator,
-    tokenMemberSeparator,
-    tokenComment,
-    tokenError
-  };
-
   class Token {
   public:
     TokenType type_;
     ptrdiff_t offsetStart_;
     ptrdiff_t offsetEnd_;
+    Token() : type_(tokenEndOfStream) {}
+    Token(const Token& token) : type_(token.type_), offsetStart_(token.offsetStart_), offsetEnd_(token.offsetEnd_) {}
   };
+
+  OurReader(Features const& features);
+  void init(const char* beginDoc,
+            const char* endDoc,
+            bool collectComments = true);
+
+  // Tokenizer support
+  bool readToken(Token& token);
+  bool readRawValue(const Token& token, const char*& beginToken, const char*& endToken);
+  bool decodeString(const Token& token, JSONCPP_STRING& decoded);
+  bool decodeDouble(const Token& token, double& decoded);
+
+  // Reader support
+  bool parse(Value& root);
+
+  bool addError(const JSONCPP_STRING& message, const Token& token, const char* extra = 0);
+  bool recoverFromError(TokenType skipUntilToken);
+  bool addErrorAndRecover(const JSONCPP_STRING& message,
+                          const Token& token,
+                          TokenType skipUntilToken);
+  JSONCPP_STRING getFormattedErrorMessages() const;
+
+private:
+  OurReader(OurReader const&);  // no impl
+  void operator=(OurReader const&);  // no impl
 
   class ErrorLocation {
   public:
@@ -149,7 +143,6 @@ private:
 
   typedef std::deque<ErrorInfo> Errors;
 
-  bool readToken(Token& token);
   void skipSpaces();
   bool match(const char* pattern, int patternLength);
   bool readComment();
@@ -161,25 +154,20 @@ private:
   bool readValue();
   bool readObject(Token& token);
   bool readArray(Token& token);
-  bool decodeNumber(Token& token);
-  bool decodeNumber(Token& token, Value& decoded);
-  bool decodeString(Token& token);
-  bool decodeString(Token& token, JSONCPP_STRING& decoded);
-  bool decodeDouble(Token& token);
-  bool decodeDouble(Token& token, Value& decoded);
-  bool decodeUnicodeCodePoint(Token& token,
+  bool decodeNumber(const Token& token);
+  bool decodeNumber(const Token& token, Value& decoded);
+  bool decodeString(const Token& token);
+  bool decodeDouble(const Token& token);
+  bool decodeDouble(const Token& token, Value& decoded);
+  bool decodeUnicodeCodePoint(const Token& token,
                               const char*& current,
                               const char* end,
                               unsigned int& unicode);
-  bool decodeUnicodeEscapeSequence(Token& token,
+  bool decodeUnicodeEscapeSequence(const Token& token,
                                    const char*& current,
                                    const char* end,
                                    unsigned int& unicode);
-  bool addError(const JSONCPP_STRING& message, Token& token, const char* extra = 0);
-  bool recoverFromError(TokenType skipUntilToken);
-  bool addErrorAndRecover(const JSONCPP_STRING& message,
-                          Token& token,
-                          TokenType skipUntilToken);
+
   Value& currentValue();
   char getNextChar();
   void getLocationLineAndColumn(const ptrdiff_t offset, ErrorLocation& location) const;
@@ -217,22 +205,25 @@ OurReader::OurReader(Features const& features)
       features_(features), collectComments_() {
 }
 
-bool OurReader::parse(const char* beginDoc,
-                   const char* endDoc,
-                   Value& root,
-                   bool collectComments) {
-  if (!features_.allowComments_) {
-    collectComments = false;
-  }
-
+void OurReader::init(const char* beginDoc,
+                     const char* endDoc,
+                     bool collectComments)
+{
   begin_ = beginDoc;
   end_ = endDoc;
-  collectComments_ = collectComments;
+  if (features_.allowComments_) {
+    collectComments_ = collectComments;
+  } else {
+    collectComments = false;
+  }
   current_ = begin_;
   lastValueEnd_ = 0;
   lastValue_ = 0;
   commentsBefore_ = "";
   errors_.clear();
+}
+
+bool OurReader::parse(Value& root) {
   while (!nodes_.empty())
     nodes_.pop();
   nodes_.push(&root);
@@ -254,7 +245,7 @@ bool OurReader::parse(const char* beginDoc,
       // in doc
       token.type_ = tokenError;
       token.offsetStart_ = 0;
-      token.offsetEnd_ = endDoc - beginDoc;
+      token.offsetEnd_ = end_ - begin_;
       addError(
           "A valid JSON document must be either an array or an object value.",
           token);
@@ -727,7 +718,21 @@ bool OurReader::readArray(Token& tokenStart) {
   return true;
 }
 
-bool OurReader::decodeNumber(Token& token) {
+bool OurReader::readRawValue(const Token& token, const char*& beginToken, const char*& endToken) {
+  if (token.type_ != tokenEndOfStream && token.type_ != tokenError) {
+    if (token.type_ == tokenString) {
+      beginToken = token.offsetStart_ + begin_ + 1; // skip '"'
+      endToken = token.offsetEnd_ + begin_ - 1;     // do not include '"'
+    } else {
+      beginToken = token.offsetStart_ + begin_;
+      endToken = token.offsetEnd_ + begin_;
+    }
+    return true;
+  }
+  return false;
+}
+
+bool OurReader::decodeNumber(const Token& token) {
   Value decoded;
   if (!decodeNumber(token, decoded))
     return false;
@@ -737,7 +742,7 @@ bool OurReader::decodeNumber(Token& token) {
   return true;
 }
 
-bool OurReader::decodeNumber(Token& token, Value& decoded) {
+bool OurReader::decodeNumber(const Token& token, Value& decoded) {
   // Attempts to parse the number as an integer. If the number is
   // larger than the maximum supported value of an integer then
   // we decode the number as a double.
@@ -778,7 +783,7 @@ bool OurReader::decodeNumber(Token& token, Value& decoded) {
   return true;
 }
 
-bool OurReader::decodeDouble(Token& token) {
+bool OurReader::decodeDouble(const Token& token) {
   Value decoded;
   if (!decodeDouble(token, decoded))
     return false;
@@ -788,7 +793,7 @@ bool OurReader::decodeDouble(Token& token) {
   return true;
 }
 
-bool OurReader::decodeDouble(Token& token, Value& decoded) {
+bool OurReader::decodeDouble(const Token& token, double& decoded) {
   double value = 0;
   const int bufferSize = 32;
   int count;
@@ -826,7 +831,15 @@ bool OurReader::decodeDouble(Token& token, Value& decoded) {
   return true;
 }
 
-bool OurReader::decodeString(Token& token) {
+bool OurReader::decodeDouble(const Token& token, Value& decoded) {
+  double value = 0;
+  if (decodeDouble(token, value) == false)
+    return false;
+  decoded = value;
+  return true;
+}
+
+bool OurReader::decodeString(const Token& token) {
   JSONCPP_STRING decoded_string;
   if (!decodeString(token, decoded_string))
     return false;
@@ -837,7 +850,7 @@ bool OurReader::decodeString(Token& token) {
   return true;
 }
 
-bool OurReader::decodeString(Token& token, JSONCPP_STRING& decoded) {
+bool OurReader::decodeString(const Token& token, JSONCPP_STRING& decoded) {
   decoded.reserve(static_cast<size_t>(token.offsetEnd_ - token.offsetStart_ - 2));
   const char* current = token.offsetStart_ + begin_ + 1; // skip '"'
   const char* end = token.offsetEnd_ + begin_ - 1;       // do not include '"'
@@ -890,10 +903,10 @@ bool OurReader::decodeString(Token& token, JSONCPP_STRING& decoded) {
   return true;
 }
 
-bool OurReader::decodeUnicodeCodePoint(Token& token,
-                                    const char*& current,
-                                    const char* end,
-                                    unsigned int& unicode) {
+bool OurReader::decodeUnicodeCodePoint(const Token& token,
+                                       const char*& current,
+                                       const char* end,
+                                       unsigned int& unicode) {
 
   if (!decodeUnicodeEscapeSequence(token, current, end, unicode))
     return false;
@@ -919,10 +932,10 @@ bool OurReader::decodeUnicodeCodePoint(Token& token,
   return true;
 }
 
-bool OurReader::decodeUnicodeEscapeSequence(Token& token,
-                                         const char*& current,
-                                         const char* end,
-                                         unsigned int& ret_unicode) {
+bool OurReader::decodeUnicodeEscapeSequence(const Token& token,
+                                            const char*& current,
+                                            const char* end,
+                                            unsigned int& ret_unicode) {
   if (end - current < 4)
     return addError(
         "Bad unicode escape sequence in string: four digits expected.",
@@ -948,7 +961,7 @@ bool OurReader::decodeUnicodeEscapeSequence(Token& token,
   return true;
 }
 
-bool OurReader::addError(const JSONCPP_STRING& message, Token& token, const char* extra) {
+bool OurReader::addError(const JSONCPP_STRING& message, const Token& token, const char* extra) {
   ErrorInfo info;
   getLocationLineAndColumn(token.offsetStart_, info.token_);
   info.message_ = message;
@@ -973,8 +986,8 @@ bool OurReader::recoverFromError(TokenType skipUntilToken) {
 }
 
 bool OurReader::addErrorAndRecover(const JSONCPP_STRING& message,
-                                Token& token,
-                                TokenType skipUntilToken) {
+                                   const Token& token,
+                                   TokenType skipUntilToken) {
   addError(message, token);
   return recoverFromError(skipUntilToken);
 }
@@ -1024,30 +1037,402 @@ JSONCPP_STRING OurReader::getFormattedErrorMessages() const {
   return formattedMessage;
 }
 
-bool OurReader::pushError(const Value& value, const JSONCPP_STRING& message) {
-  ptrdiff_t length = end_ - begin_;
-  if(value.getOffsetStart() > length
-    || value.getOffsetLimit() > length)
-    return false;
-  ErrorInfo info;
-  getLocationLineAndColumn(value.getOffsetStart(), info.token_);
-  info.message_ = message;
-  errors_.push_back(info);
-  return true;
+// class OurTokenizer
+// ////////////////////////////////
+
+class OurTokenizer : public Tokenizer {
+  Features const features_;
+  OurReader reader_;
+  OurReader::Token token_;
+  OurReader::Token tokenReadAhead_;
+  bool firstNVP_;
+  bool requireSeparator_;
+  bool isArray_;
+  std::vector<bool> arrIsArray_;
+public:
+  OurTokenizer(Features const& features)
+  : features_(features)
+  , reader_(features)
+  , token_()
+  , firstNVP_(true)
+  , requireSeparator_(true)
+  , isArray_(false)
+  , arrIsArray_()
+  {}
+
+  void init(char const* beginDoc, char const* endDoc) JSONCPP_OVERRIDE;
+  TokenType readToken() JSONCPP_OVERRIDE;
+  TokenType readNVP(JSONCPP_STRING& name) JSONCPP_OVERRIDE;
+  bool getDecodedString(JSONCPP_STRING& value) JSONCPP_OVERRIDE;
+  bool getDecodedDouble(double& value) JSONCPP_OVERRIDE;
+  bool getRawString(const char*& beginToken, const char*& endToken) JSONCPP_OVERRIDE;
+  JSONCPP_STRING getError() JSONCPP_OVERRIDE;
+
+private:
+  void pushIsArray(bool isArray) {
+    arrIsArray_.push_back(isArray_);
+    isArray_ = isArray;
+  }
+  void popIsArray() {
+    if ( arrIsArray_.size() > 0 ) {
+      isArray_ = arrIsArray_.back();
+      arrIsArray_.pop_back();
+    } else {
+      isArray_ = false;
+    }
+  }
+};
+
+void OurTokenizer::init(char const* beginDoc, char const* endDoc)
+{
+  reader_.init(beginDoc, endDoc, false);
 }
 
-bool OurReader::pushError(const Value& value, const JSONCPP_STRING& message, const Value& extra) {
-  ptrdiff_t length = end_ - begin_;
-  if(value.getOffsetStart() > length
-    || value.getOffsetLimit() > length
-    || extra.getOffsetLimit() > length)
-    return false;
-  ErrorInfo info;
-  getLocationLineAndColumn(value.getOffsetStart(), info.token_);
-  info.message_ = message;
-  getLocationLineAndColumn(extra.getOffsetStart(), info.extra_);
-  errors_.push_back(info);
-  return true;
+TokenType OurTokenizer::readToken()
+{
+  if (token_.type_ != tokenError)
+    reader_.readToken(token_);
+  return token_.type_;
+}
+
+TokenType OurTokenizer::readNVP(JSONCPP_STRING& name)
+{
+  // APPLY some logic to impose features??? Like having to have an object/array at the root?
+  // TODO: Add some smarts just in case one combines readToken with readNVP
+  name.clear();
+  if (token_.type_ != tokenError) {
+    if (tokenReadAhead_.type_ != tokenEndOfStream) {
+      token_ = tokenReadAhead_;
+      tokenReadAhead_.type_ = tokenEndOfStream;
+    } else {
+      reader_.readToken(token_);
+    }
+  }
+  if (requireSeparator_ == true)
+  {
+    switch (token_.type_) {
+    case tokenArraySeparator:
+      if (firstNVP_ == true) {
+        firstNVP_ = false;
+        reader_.addError(
+            "Unexpected ',' at the beginning of the document, expected '{' or '['.",
+            token_);
+        return token_.type_ = tokenError;
+      }
+      break;
+
+    case tokenObjectEnd:
+      if (isArray_ == true) {
+        reader_.addError(
+            "Unexpected end of object, missing ']'.",
+            token_);
+        return token_.type_ = tokenError;
+      }
+      popIsArray();
+      return token_.type_;
+
+    case tokenArrayEnd:
+      if (isArray_ == false) {
+        reader_.addError(
+            "Unexpected end of array, missing '}'.",
+            token_);
+        return token_.type_ = tokenError;
+      }
+      popIsArray();
+      return token_.type_;
+
+    case tokenEndOfStream:
+    case tokenComment:
+      return token_.type_;
+
+    case tokenObjectBegin:
+    case tokenArrayBegin:
+      if (firstNVP_ == false) {
+        reader_.addError(
+            (isArray_ == false)?"Missing ',' or '}' in object declaration":"Missing ',' or ']' in array declaration",
+            token_);
+        return token_.type_ = tokenError;
+      }
+      firstNVP_ = false;
+      requireSeparator_ = false;
+      isArray_ = (token_.type_ == tokenArrayBegin);
+      return token_.type_;
+
+    case tokenMemberSeparator:
+      // These tokens are not allowed here.
+      reader_.addError(
+          (isArray_ == false)?"Missing ',' or '}' in object declaration":"Missing ',' or ']' in array declaration",
+          token_);
+      return token_.type_ = tokenError;
+
+    case tokenError:
+      return token_.type_;
+
+    default:
+      // tokenString, tokenNumber, tokenTrue, tokenFalse, tokenNull, tokenNaN, tokenPosInf, tokenNegInf
+      if (firstNVP_ == true) {
+        if (features_.strictRoot_) {
+          reader_.addError(
+              "A valid JSON document must be either an array or an object value.",
+              token_);
+          return token_.type_ = tokenError;
+        }
+        firstNVP_ = false;
+        return token_.type_;
+      }
+      // These tokens are not allowed here.
+      reader_.addError(
+          (isArray_ == false)?"Missing ',' or '}' in object declaration":"Missing ',' or ']' in array declaration",
+          token_);
+      return token_.type_ = tokenError;
+    }
+    reader_.readToken(token_);
+  } else {
+    requireSeparator_ = true;
+  }
+
+  switch (token_.type_) {
+  case tokenEndOfStream:
+    reader_.addError(
+        "Unexpected end of document",
+        token_);
+    return token_.type_ = tokenError;
+
+  case tokenError:
+    return token_.type_;
+
+  case tokenComment:
+    return token_.type_;
+  }
+
+  // Grab the name of the name/value pair
+  if (isArray_ == false) {
+    switch (token_.type_) {
+    case tokenString:
+      if (getDecodedString(name) == false) {
+        name.clear();
+        return token_.type_ = tokenError;
+      }
+      break;
+
+    case tokenNumber:
+      if (features_.allowNumericKeys_) {
+        const char* nameBegin;
+        const char* nameEnd;
+        reader_.readRawValue(token_, nameBegin, nameEnd);
+        name = JSONCPP_STRING(nameBegin, nameEnd);
+      }
+      else {
+        reader_.addError(
+            "A valid JSON document must not contain Mumeric keys.",
+            token_);
+        return token_.type_ = tokenError;
+      }
+      break;
+
+    default:
+      // tokenObjectBegin, tokenObjectEnd, tokenArrayBegin, tokenArrayEnd, tokenTrue, tokenFalse, tokenNull, tokenNaN, tokenPosInf, tokenNegInf, tokenArraySeparator, tokenMemberSeparator
+      // These type of tokens are not expected here!
+      reader_.addError(
+          "Missing '}' or object member name",
+          token_);
+      return token_.type_ = tokenError;
+    }
+
+    reader_.readToken(token_);
+    switch (token_.type_) {
+    case tokenMemberSeparator:
+      reader_.readToken(token_);
+      switch (token_.type_) {
+      case tokenEndOfStream:
+        reader_.addError(
+            "Syntax error: value, object or array expected.", 
+            token_);
+        return token_.type_ = tokenError;
+
+      case tokenError:
+        return token_.type_;
+
+      case tokenComment:
+        reader_.addError(
+            "Syntax error: comments not supported between member name, member separator and value.", 
+            token_);
+        return token_.type_ = tokenError;
+      }
+      break;
+
+    case tokenObjectEnd:
+    case tokenArraySeparator:
+      if (features_.allowDroppedNullPlaceholders_) {
+        tokenReadAhead_ = token_;
+        return token_.type_ = tokenNull;
+      }
+      reader_.addError(
+          "Syntax error: value, object or array expected.", 
+          token_);
+      return token_.type_ = tokenError;
+
+    case tokenEndOfStream:
+      reader_.addError(
+          "Unexpected end of document",
+          token_);
+      return token_.type_ = tokenError;
+
+    case tokenError:
+      return token_.type_;
+
+    case tokenComment:
+      reader_.addError(
+          "Syntax error: comments not supported between member name, member separator and value.", 
+          token_);
+      return token_.type_ = tokenError;
+
+    default:
+      // tokenObjectBegin, tokenArrayBegin, tokenArrayEnd, tokenString, tokenNumber, tokenTrue, tokenFalse, tokenNull, tokenNaN, tokenPosInf, tokenNegInf
+      // These type of tokens are not expected here!
+      reader_.addError(
+          "Missing ':' after object member name",
+          token_);
+      return token_.type_ = tokenError;
+    }
+  }
+
+  // Grab the value
+  switch (token_.type_) {
+  case tokenObjectBegin:
+  case tokenArrayBegin:
+    requireSeparator_ = false;
+    pushIsArray(token_.type_ == tokenArrayBegin);
+    break;
+
+  case tokenString:
+  case tokenNumber:
+  case tokenTrue:
+  case tokenFalse:
+  case tokenNull:
+  case tokenNaN:
+  case tokenPosInf:
+  case tokenNegInf:
+    break;
+
+  default:
+    // tokenObjectEnd, tokenArrayEnd, tokenArraySeparator, tokenMemberSeparator
+    // These type of tokens are not expected here!
+    reader_.addError(
+        "Syntax error: value, object or array expected.", 
+        token_);
+    return token_.type_ = tokenError;
+  }
+  return token_.type_;
+}
+
+bool OurTokenizer::getDecodedString(JSONCPP_STRING& value)
+{
+  value.clear();
+  return reader_.decodeString(token_, value);
+}
+
+bool OurTokenizer::getDecodedDouble(double& value)
+{
+  return reader_.decodeDouble(token_, value);
+}
+
+bool OurTokenizer::getRawString(const char*& beginToken, const char*& endToken)
+{
+  return reader_.readRawValue(token_, beginToken, endToken);
+}
+
+JSONCPP_STRING OurTokenizer::getError()
+{
+  return reader_.getFormattedErrorMessages();
+}
+
+// Implementation of class TokenizerBuilder
+// ////////////////////////////////
+
+TokenizerBuilder::TokenizerBuilder()
+{
+    setDefaults(&settings_);
+}
+TokenizerBuilder::~TokenizerBuilder()
+{}
+Tokenizer* TokenizerBuilder::newTokenizer() const
+{
+    Features features = Features::all();
+    features.allowComments_ = settings_["allowComments"].asBool();
+    features.strictRoot_ = settings_["strictRoot"].asBool();
+    features.allowDroppedNullPlaceholders_ = settings_["allowDroppedNullPlaceholders"].asBool();
+    features.allowNumericKeys_ = settings_["allowNumericKeys"].asBool();
+    features.allowSingleQuotes_ = settings_["allowSingleQuotes"].asBool();
+    features.stackLimit_ = settings_["stackLimit"].asInt();
+    features.failIfExtra_ = settings_["failIfExtra"].asBool();
+    features.rejectDupKeys_ = settings_["rejectDupKeys"].asBool();
+    features.allowSpecialFloats_ = settings_["allowSpecialFloats"].asBool();
+    return new OurTokenizer(features);
+}
+static void getValidTokenizerKeys(std::set<JSONCPP_STRING>* valid_keys)
+{
+    valid_keys->clear();
+    valid_keys->insert("allowComments");
+    valid_keys->insert("strictRoot");
+    valid_keys->insert("allowDroppedNullPlaceholders");
+    valid_keys->insert("allowNumericKeys");
+    valid_keys->insert("allowSingleQuotes");
+    valid_keys->insert("stackLimit");
+    valid_keys->insert("failIfExtra");
+    valid_keys->insert("rejectDupKeys");
+    valid_keys->insert("allowSpecialFloats");
+}
+bool TokenizerBuilder::validate(Json::Value* invalid) const
+{
+    Json::Value my_invalid;
+    if (!invalid) invalid = &my_invalid;  // so we do not need to test for NULL
+    Json::Value& inv = *invalid;
+    std::set<JSONCPP_STRING> valid_keys;
+    getValidTokenizerKeys(&valid_keys);
+    Value::Members keys = settings_.getMemberNames();
+    size_t n = keys.size();
+    for (size_t i = 0; i < n; ++i) {
+        JSONCPP_STRING const& key = keys[i];
+        if (valid_keys.find(key) == valid_keys.end()) {
+            inv[key] = settings_[key];
+        }
+    }
+    return 0u == inv.size();
+}
+Value& TokenizerBuilder::operator[](JSONCPP_STRING key)
+{
+    return settings_[key];
+}
+// static
+void TokenizerBuilder::strictMode(Json::Value* settings)
+{
+    //! [CharReaderBuilderStrictMode]
+    (*settings)["allowComments"] = false;
+    (*settings)["strictRoot"] = true;
+    (*settings)["allowDroppedNullPlaceholders"] = false;
+    (*settings)["allowNumericKeys"] = false;
+    (*settings)["allowSingleQuotes"] = false;
+    (*settings)["stackLimit"] = 1000;
+    (*settings)["failIfExtra"] = true;
+    (*settings)["rejectDupKeys"] = true;
+    (*settings)["allowSpecialFloats"] = false;
+    //! [CharReaderBuilderStrictMode]
+}
+// static
+void TokenizerBuilder::setDefaults(Json::Value* settings)
+{
+    //! [CharReaderBuilderDefaults]
+    (*settings)["allowComments"] = true;
+    (*settings)["strictRoot"] = false;
+    (*settings)["allowDroppedNullPlaceholders"] = false;
+    (*settings)["allowNumericKeys"] = false;
+    (*settings)["allowSingleQuotes"] = false;
+    (*settings)["stackLimit"] = 1000;
+    (*settings)["failIfExtra"] = false;
+    (*settings)["rejectDupKeys"] = false;
+    (*settings)["allowSpecialFloats"] = false;
+    //! [CharReaderBuilderDefaults]
 }
 
 // class OurCharReader
@@ -1066,7 +1451,8 @@ public:
   bool parse(
       char const* beginDoc, char const* endDoc,
       Value* root, JSONCPP_STRING* errs) JSONCPP_OVERRIDE {
-    bool ok = reader_.parse(beginDoc, endDoc, *root, collectComments_);
+    reader_.init(beginDoc, endDoc, collectComments_);
+    bool ok = reader_.parse(*root);
     if (errs) {
       *errs = reader_.getFormattedErrorMessages();
     }

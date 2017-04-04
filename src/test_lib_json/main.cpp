@@ -1756,6 +1756,470 @@ JSONTEST_FIXTURE(StreamWriterTest, writeZeroes) {
   }
 }
 
+#define JSONTEST_ASSERT_TOKEN_OBJECTBEGIN() \
+    ttype = tokenizer->readToken(); \
+    JSONTEST_ASSERT(ttype == Json::TokenType::tokenObjectBegin);
+
+#define JSONTEST_ASSERT_TOKEN_OBJECTEND() \
+    ttype = tokenizer->readToken(); \
+    JSONTEST_ASSERT(ttype == Json::TokenType::tokenObjectEnd);
+
+#define JSONTEST_ASSERT_TOKEN_ARRAYBEGIN() \
+    ttype = tokenizer->readToken(); \
+    JSONTEST_ASSERT(ttype == Json::TokenType::tokenArrayBegin);
+
+#define JSONTEST_ASSERT_TOKEN_ARRAYEND() \
+    ttype = tokenizer->readToken(); \
+    JSONTEST_ASSERT(ttype == Json::TokenType::tokenArrayEnd);
+
+#define JSONTEST_ASSERT_TOKEN_MEMBERSEPARATOR() \
+    ttype = tokenizer->readToken(); \
+    JSONTEST_ASSERT(ttype == Json::TokenType::tokenMemberSeparator);
+
+#define JSONTEST_ASSERT_TOKEN_ARRAYSEPARATOR() \
+    ttype = tokenizer->readToken(); \
+    JSONTEST_ASSERT(ttype == Json::TokenType::tokenArraySeparator);
+
+#define JSONTEST_ASSERT_TOKEN_ENDOFSTREAM() \
+    ttype = tokenizer->readToken(); \
+    JSONTEST_ASSERT(ttype == Json::TokenType::tokenEndOfStream);
+
+#define JSONTEST_ASSERT_TOKEN_STRING(SVAL) \
+    { \
+        ttype = tokenizer->readToken(); \
+        JSONTEST_ASSERT(ttype == Json::TokenType::tokenString); \
+        JSONCPP_STRING value; \
+        bool ok = tokenizer->getDecodedString(value); \
+        JSONTEST_ASSERT(ok); \
+        JSONTEST_ASSERT(value.compare(#SVAL) == 0); \
+    }
+
+#define JSONTEST_ASSERT_TOKEN_STRING_DECODE_ERROR(SRAWVAL) \
+    { \
+        ttype = tokenizer->readToken(); \
+        JSONTEST_ASSERT(ttype == Json::TokenType::tokenString); \
+        JSONCPP_STRING value; \
+        bool ok = tokenizer->getDecodedString(value); \
+        JSONTEST_ASSERT(!ok); \
+        const char* beginToken; \
+        const char* endToken; \
+        ok = tokenizer->getRawString(beginToken, endToken); \
+        JSONTEST_ASSERT(ok); \
+        JSONTEST_ASSERT(JSONCPP_STRING(beginToken, endToken).compare(#SRAWVAL) == 0); \
+    }
+
+#define JSONTEST_ASSERT_TOKEN_DOUBLE(DVAL) \
+    { \
+        ttype = tokenizer->readToken(); \
+        JSONTEST_ASSERT(ttype == Json::TokenType::tokenNumber); \
+        const char* beginToken; \
+        const char* endToken; \
+        bool ok = tokenizer->getRawString(beginToken, endToken); \
+        JSONTEST_ASSERT(ok); \
+        JSONTEST_ASSERT(JSONCPP_STRING(beginToken, endToken).compare(#DVAL) == 0); \
+        double dvalue; \
+        ok = tokenizer->getDecodedDouble(dvalue); \
+        JSONTEST_ASSERT(ok); \
+        JSONTEST_ASSERT(dvalue == DVAL); \
+    }
+
+#define JSONTEST_ASSERT_TOKEN_NULL() \
+    ttype = tokenizer->readToken(); \
+    JSONTEST_ASSERT(ttype == Json::TokenType::tokenNull);
+
+#define JSONTEST_ASSERT_TOKEN_TRUE() \
+    ttype = tokenizer->readToken(); \
+    JSONTEST_ASSERT(ttype == Json::TokenType::tokenTrue);
+
+#define JSONTEST_ASSERT_TOKEN_FALSE() \
+    ttype = tokenizer->readToken(); \
+    JSONTEST_ASSERT(ttype == Json::TokenType::tokenFalse);
+
+#define JSONTEST_ASSERT_TOKEN_ERROR() \
+    ttype = tokenizer->readToken(); \
+    JSONTEST_ASSERT(ttype == Json::TokenType::tokenError);
+
+#define JSONTEST_ASSERT_NVP_OBJECTBEGIN() \
+    ttype = tokenizer->readNVP(member); \
+    JSONTEST_ASSERT(member.empty()); \
+    JSONTEST_ASSERT(ttype == Json::TokenType::tokenObjectBegin);
+
+#define JSONTEST_ASSERT_NVP_OBJECTBEGIN_MEMBER(MEMBER) \
+    ttype = tokenizer->readNVP(member); \
+    JSONTEST_ASSERT(member.compare(#MEMBER) == 0); \
+    JSONTEST_ASSERT(ttype == Json::TokenType::tokenObjectBegin);
+
+#define JSONTEST_ASSERT_NVP_OBJECTEND() \
+    ttype = tokenizer->readNVP(member); \
+    JSONTEST_ASSERT(member.empty()); \
+    JSONTEST_ASSERT(ttype == Json::TokenType::tokenObjectEnd);
+
+#define JSONTEST_ASSERT_NVP_ARRAYBEGIN() \
+    ttype = tokenizer->readNVP(member); \
+    JSONTEST_ASSERT(member.empty()); \
+    JSONTEST_ASSERT(ttype == Json::TokenType::tokenArrayBegin);
+
+#define JSONTEST_ASSERT_NVP_ARRAYBEGIN_MEMBER(MEMBER) \
+    ttype = tokenizer->readNVP(member); \
+    JSONTEST_ASSERT(member.compare(#MEMBER) == 0); \
+    JSONTEST_ASSERT(ttype == Json::TokenType::tokenArrayBegin);
+
+#define JSONTEST_ASSERT_NVP_ARRAYEND() \
+    ttype = tokenizer->readNVP(member); \
+    JSONTEST_ASSERT(member.empty()); \
+    JSONTEST_ASSERT(ttype == Json::TokenType::tokenArrayEnd);
+
+#define JSONTEST_ASSERT_NVP_ENDOFSTREAM() \
+    ttype = tokenizer->readNVP(member); \
+    JSONTEST_ASSERT(member.empty()); \
+    JSONTEST_ASSERT(ttype == Json::TokenType::tokenEndOfStream);
+
+#define JSONTEST_ASSERT_NVP_STRING(SVAL) \
+    { \
+        ttype = tokenizer->readNVP(member); \
+        JSONTEST_ASSERT(member.empty()); \
+        JSONTEST_ASSERT(ttype == Json::TokenType::tokenString); \
+        JSONCPP_STRING value; \
+        bool ok = tokenizer->getDecodedString(value); \
+        JSONTEST_ASSERT(ok); \
+        JSONTEST_ASSERT(value.compare(#SVAL) == 0); \
+    }
+
+#define JSONTEST_ASSERT_NVP_STRING_MEMBER(MEMBER, SVAL) \
+    { \
+        ttype = tokenizer->readNVP(member); \
+        JSONTEST_ASSERT(member.compare(#MEMBER) == 0); \
+        JSONTEST_ASSERT(ttype == Json::TokenType::tokenString); \
+        JSONCPP_STRING value; \
+        bool ok = tokenizer->getDecodedString(value); \
+        JSONTEST_ASSERT(ok); \
+        JSONTEST_ASSERT(value.compare(#SVAL) == 0); \
+    }
+
+#define JSONTEST_ASSERT_NVP_STRING_MEMBER_VALUE_DECODE_ERROR(MEMBER, SRAWVAL) \
+    { \
+        ttype = tokenizer->readNVP(member); \
+        JSONTEST_ASSERT(member.compare(#MEMBER) == 0); \
+        JSONTEST_ASSERT(ttype == Json::TokenType::tokenString); \
+        JSONCPP_STRING value; \
+        bool ok = tokenizer->getDecodedString(value); \
+        JSONTEST_ASSERT(!ok); \
+        const char* beginToken; \
+        const char* endToken; \
+        ok = tokenizer->getRawString(beginToken, endToken); \
+        JSONTEST_ASSERT(ok); \
+        JSONTEST_ASSERT(JSONCPP_STRING(beginToken, endToken).compare(#SRAWVAL) == 0); \
+    }
+
+#define JSONTEST_ASSERT_NVP_DOUBLE(DVAL) \
+    { \
+        ttype = tokenizer->readNVP(member); \
+        JSONTEST_ASSERT(member.empty()); \
+        JSONTEST_ASSERT(ttype == Json::TokenType::tokenNumber); \
+        const char* beginToken; \
+        const char* endToken; \
+        bool ok = tokenizer->getRawString(beginToken, endToken); \
+        JSONTEST_ASSERT(ok); \
+        JSONTEST_ASSERT(JSONCPP_STRING(beginToken, endToken).compare(#DVAL) == 0); \
+        double dvalue; \
+        ok = tokenizer->getDecodedDouble(dvalue); \
+        JSONTEST_ASSERT(ok); \
+        JSONTEST_ASSERT(dvalue == DVAL); \
+    }
+
+#define JSONTEST_ASSERT_NVP_DOUBLE_MEMBER(MEMBER, DVAL) \
+    { \
+        ttype = tokenizer->readNVP(member); \
+        JSONTEST_ASSERT(member.compare(#MEMBER) == 0); \
+        JSONTEST_ASSERT(ttype == Json::TokenType::tokenNumber); \
+        const char* beginToken; \
+        const char* endToken; \
+        bool ok = tokenizer->getRawString(beginToken, endToken); \
+        JSONTEST_ASSERT(ok); \
+        JSONTEST_ASSERT(JSONCPP_STRING(beginToken, endToken).compare(#DVAL) == 0); \
+        double dvalue; \
+        ok = tokenizer->getDecodedDouble(dvalue); \
+        JSONTEST_ASSERT(ok); \
+        JSONTEST_ASSERT(dvalue == DVAL); \
+    }
+
+#define JSONTEST_ASSERT_NVP_NULL() \
+    ttype = tokenizer->readNVP(member); \
+    JSONTEST_ASSERT(member.empty()); \
+    JSONTEST_ASSERT(ttype == Json::TokenType::tokenNull);
+
+#define JSONTEST_ASSERT_NVP_NULL_MEMBER(MEMBER) \
+    ttype = tokenizer->readNVP(member); \
+    JSONTEST_ASSERT(member.compare(#MEMBER) == 0); \
+    JSONTEST_ASSERT(ttype == Json::TokenType::tokenNull);
+
+#define JSONTEST_ASSERT_NVP_TRUE() \
+    ttype = tokenizer->readNVP(member); \
+    JSONTEST_ASSERT(member.empty()); \
+    JSONTEST_ASSERT(ttype == Json::TokenType::tokenTrue);
+
+#define JSONTEST_ASSERT_NVP_TRUE_MEMBER(MEMBER) \
+    ttype = tokenizer->readNVP(member); \
+    JSONTEST_ASSERT(member.compare(#MEMBER) == 0); \
+    JSONTEST_ASSERT(ttype == Json::TokenType::tokenTrue);
+
+#define JSONTEST_ASSERT_NVP_FALSE() \
+    ttype = tokenizer->readNVP(member); \
+    JSONTEST_ASSERT(member.empty()); \
+    JSONTEST_ASSERT(ttype == Json::TokenType::tokenFalse);
+
+#define JSONTEST_ASSERT_NVP_FALSE_MEMBER(MEMBER) \
+    ttype = tokenizer->readNVP(member); \
+    JSONTEST_ASSERT(member.compare(#MEMBER) == 0); \
+    JSONTEST_ASSERT(ttype == Json::TokenType::tokenFalse);
+
+#define JSONTEST_ASSERT_NVP_ERROR() \
+    ttype = tokenizer->readNVP(member); \
+    JSONTEST_ASSERT(member.empty()); \
+    JSONTEST_ASSERT(ttype == Json::TokenType::tokenError);
+
+#define JSONTEST_ASSERT_NVP_ERROR_MEMBER(MEMBER) \
+    ttype = tokenizer->readNVP(member); \
+    JSONTEST_ASSERT(member.compare(#MEMBER) == 0); \
+    JSONTEST_ASSERT(ttype == Json::TokenType::tokenError);
+
+struct TokenizerTest : JsonTest::TestCase {};
+
+JSONTEST_FIXTURE(TokenizerTest, tokenizeWithNoErrors) {
+    Json::TokenizerBuilder b;
+    Json::Tokenizer* tokenizer(b.newTokenizer());
+    char const doc[] = "{ \"property\" : \"value\" }";
+    tokenizer->init(doc, doc + std::strlen(doc));
+    Json::TokenType ttype;
+    JSONTEST_ASSERT_TOKEN_OBJECTBEGIN();
+    JSONTEST_ASSERT_TOKEN_STRING(property);
+    JSONTEST_ASSERT_TOKEN_MEMBERSEPARATOR();
+    JSONTEST_ASSERT_TOKEN_STRING(value);
+    JSONTEST_ASSERT_TOKEN_OBJECTEND();
+    JSONTEST_ASSERT_TOKEN_ENDOFSTREAM();
+    delete tokenizer;
+}
+
+JSONTEST_FIXTURE(TokenizerTest, tokenizeNVPWithNoErrors) {
+    Json::TokenizerBuilder b;
+    Json::Tokenizer* tokenizer(b.newTokenizer());
+    char const doc[] = "{ \"property\" : \"value\" }";
+    tokenizer->init(doc, doc + std::strlen(doc));
+    JSONCPP_STRING member;
+    Json::TokenType ttype;
+    JSONTEST_ASSERT_NVP_OBJECTBEGIN();
+    JSONTEST_ASSERT_NVP_STRING_MEMBER(property, value);
+    JSONTEST_ASSERT_NVP_OBJECTEND();
+    JSONTEST_ASSERT_NVP_ENDOFSTREAM();
+    delete tokenizer;
+}
+
+JSONTEST_FIXTURE(TokenizerTest, tokenizeWithNoErrorsTestingOffsets) {
+    Json::TokenizerBuilder b;
+    Json::Tokenizer* tokenizer(b.newTokenizer());
+    char const doc[] =
+        "{ \"property\" : [\"value\", \"value2\"], \"obj\" : "
+        "{ \"nested\" : 123, \"bool\" : true}, \"null\" : "
+        "null, \"false\" : false }";
+    tokenizer->init(doc, doc + std::strlen(doc));
+    Json::TokenType ttype;
+    JSONTEST_ASSERT_TOKEN_OBJECTBEGIN();
+    JSONTEST_ASSERT_TOKEN_STRING(property);
+    JSONTEST_ASSERT_TOKEN_MEMBERSEPARATOR();
+    JSONTEST_ASSERT_TOKEN_ARRAYBEGIN();
+    JSONTEST_ASSERT_TOKEN_STRING(value);
+    JSONTEST_ASSERT_TOKEN_ARRAYSEPARATOR();
+    JSONTEST_ASSERT_TOKEN_STRING(value2);
+    JSONTEST_ASSERT_TOKEN_ARRAYEND();
+    JSONTEST_ASSERT_TOKEN_ARRAYSEPARATOR();
+    JSONTEST_ASSERT_TOKEN_STRING(obj);
+    JSONTEST_ASSERT_TOKEN_MEMBERSEPARATOR();
+    JSONTEST_ASSERT_TOKEN_OBJECTBEGIN();
+    JSONTEST_ASSERT_TOKEN_STRING(nested);
+    JSONTEST_ASSERT_TOKEN_MEMBERSEPARATOR();
+    JSONTEST_ASSERT_TOKEN_DOUBLE(123);
+    JSONTEST_ASSERT_TOKEN_ARRAYSEPARATOR();
+    JSONTEST_ASSERT_TOKEN_STRING(bool);
+    JSONTEST_ASSERT_TOKEN_MEMBERSEPARATOR();
+    JSONTEST_ASSERT_TOKEN_TRUE();
+    JSONTEST_ASSERT_TOKEN_OBJECTEND();
+    JSONTEST_ASSERT_TOKEN_ARRAYSEPARATOR();
+    JSONTEST_ASSERT_TOKEN_STRING(null);
+    JSONTEST_ASSERT_TOKEN_MEMBERSEPARATOR();
+    JSONTEST_ASSERT_TOKEN_NULL();
+    JSONTEST_ASSERT_TOKEN_ARRAYSEPARATOR();
+    JSONTEST_ASSERT_TOKEN_STRING(false)
+    JSONTEST_ASSERT_TOKEN_MEMBERSEPARATOR();
+    JSONTEST_ASSERT_TOKEN_FALSE();
+    JSONTEST_ASSERT_TOKEN_OBJECTEND()
+    JSONTEST_ASSERT_TOKEN_ENDOFSTREAM();
+    delete tokenizer;
+}
+
+JSONTEST_FIXTURE(TokenizerTest, tokenizeNVPWithNoErrorsTestingOffsets) {
+    Json::TokenizerBuilder b;
+    Json::Tokenizer* tokenizer(b.newTokenizer());
+    char const doc[] =
+        "{ \"property\" : [\"value\", \"value2\"], \"obj\" : "
+        "{ \"nested\" : 123, \"bool\" : true}, \"null\" : "
+        "null, \"false\" : false }";
+    tokenizer->init(doc, doc + std::strlen(doc));
+    JSONCPP_STRING member;
+    Json::TokenType ttype;
+    JSONTEST_ASSERT_NVP_OBJECTBEGIN();
+    JSONTEST_ASSERT_NVP_ARRAYBEGIN_MEMBER(property);
+    JSONTEST_ASSERT_NVP_STRING(value);
+    JSONTEST_ASSERT_NVP_STRING(value2);
+    JSONTEST_ASSERT_NVP_ARRAYEND();
+    JSONTEST_ASSERT_NVP_OBJECTBEGIN_MEMBER(obj);
+    JSONTEST_ASSERT_NVP_DOUBLE_MEMBER(nested, 123);
+    JSONTEST_ASSERT_NVP_TRUE_MEMBER(bool);
+    JSONTEST_ASSERT_NVP_OBJECTEND();
+    JSONTEST_ASSERT_NVP_NULL_MEMBER(null);
+    JSONTEST_ASSERT_NVP_FALSE_MEMBER(false);
+    JSONTEST_ASSERT_NVP_OBJECTEND();
+    JSONTEST_ASSERT_NVP_ENDOFSTREAM();
+    delete tokenizer;
+}
+
+JSONTEST_FIXTURE(TokenizerTest, tokenizeWithOneError) {
+    Json::TokenizerBuilder b;
+    Json::Tokenizer* tokenizer(b.newTokenizer());
+    char const doc[] =
+        "{ \"property\" :: \"value\" }";
+    tokenizer->init(doc, doc + std::strlen(doc));
+    Json::TokenType ttype;
+    JSONTEST_ASSERT_TOKEN_OBJECTBEGIN();
+    JSONTEST_ASSERT_TOKEN_STRING(property);
+    JSONTEST_ASSERT_TOKEN_MEMBERSEPARATOR();
+    // NOTE: It is up to the consumer to detect the error!!!
+    JSONTEST_ASSERT_TOKEN_MEMBERSEPARATOR();
+    JSONTEST_ASSERT_TOKEN_STRING(value);
+    JSONTEST_ASSERT_TOKEN_OBJECTEND();
+    JSONTEST_ASSERT_TOKEN_ENDOFSTREAM();
+    delete tokenizer;
+}
+
+JSONTEST_FIXTURE(TokenizerTest, tokenizeNVPWithOneError) {
+    Json::TokenizerBuilder b;
+    Json::Tokenizer* tokenizer(b.newTokenizer());
+    char const doc[] =
+        "{ \"property\" :: \"value\" }";
+    tokenizer->init(doc, doc + std::strlen(doc));
+    JSONCPP_STRING member;
+    Json::TokenType ttype;
+    JSONTEST_ASSERT_NVP_OBJECTBEGIN();
+    JSONTEST_ASSERT_NVP_ERROR_MEMBER(property);
+    JSONTEST_ASSERT(tokenizer->getError() ==
+        "* Line 1, Column 15\n  Syntax error: value, object or array "
+        "expected.\n");
+    delete tokenizer;
+}
+
+JSONTEST_FIXTURE(TokenizerTest, tokenizeChineseWithOneError) {
+    Json::TokenizerBuilder b;
+    Json::Tokenizer* tokenizer(b.newTokenizer());
+    char const doc[] =
+        "{ \"pr佐藤erty\" :: \"value\" }";
+    tokenizer->init(doc, doc + std::strlen(doc));
+    Json::TokenType ttype;
+    JSONTEST_ASSERT_TOKEN_OBJECTBEGIN();
+    JSONTEST_ASSERT_TOKEN_STRING(pr佐藤erty);
+    JSONTEST_ASSERT_TOKEN_MEMBERSEPARATOR();
+    // NOTE: It is up to the consumer to detect the error!!!
+    JSONTEST_ASSERT_TOKEN_MEMBERSEPARATOR();
+    JSONTEST_ASSERT_TOKEN_STRING(value);
+    JSONTEST_ASSERT_TOKEN_OBJECTEND();
+    JSONTEST_ASSERT_TOKEN_ENDOFSTREAM();
+    delete tokenizer;
+}
+
+JSONTEST_FIXTURE(TokenizerTest, tokenizeNVPChineseWithOneError) {
+    Json::TokenizerBuilder b;
+    Json::Tokenizer* tokenizer(b.newTokenizer());
+    char const doc[] =
+        "{ \"pr佐藤erty\" :: \"value\" }";
+    tokenizer->init(doc, doc + std::strlen(doc));
+    JSONCPP_STRING member;
+    Json::TokenType ttype;
+    JSONTEST_ASSERT_NVP_OBJECTBEGIN();
+    JSONTEST_ASSERT_NVP_ERROR_MEMBER(pr佐藤erty);
+    JSONTEST_ASSERT(tokenizer->getError() ==
+        "* Line 1, Column 19\n  Syntax error: value, object or array "
+        "expected.\n");
+    delete tokenizer;
+}
+
+JSONTEST_FIXTURE(TokenizerTest, tokenizeWithDetailErrorInMember) {
+    Json::TokenizerBuilder b;
+    Json::Tokenizer* tokenizer(b.newTokenizer());
+    JSONCPP_STRING errs;
+    char const doc[] =
+        "{ \"prop\\erty\" : \"value\" }";
+    tokenizer->init(doc, doc + std::strlen(doc));
+    Json::TokenType ttype;
+    JSONTEST_ASSERT_TOKEN_OBJECTBEGIN();
+    // NOTE: It returns a string token but the decode will return an error!!!
+    JSONTEST_ASSERT_TOKEN_STRING_DECODE_ERROR(prop\\erty);
+    JSONTEST_ASSERT_TOKEN_MEMBERSEPARATOR();
+    JSONTEST_ASSERT_TOKEN_STRING(value);
+    JSONTEST_ASSERT_TOKEN_OBJECTEND();
+    JSONTEST_ASSERT_TOKEN_ENDOFSTREAM();
+    delete tokenizer;
+}
+
+JSONTEST_FIXTURE(TokenizerTest, tokenizeNVPWithDetailErrorInMember) {
+    Json::TokenizerBuilder b;
+    Json::Tokenizer* tokenizer(b.newTokenizer());
+    char const doc[] =
+        "{ \"prop\\erty\" : \"value\" }";
+    tokenizer->init(doc, doc + std::strlen(doc));
+    JSONCPP_STRING member;
+    Json::TokenType ttype;
+    JSONTEST_ASSERT_NVP_OBJECTBEGIN();
+    JSONTEST_ASSERT_NVP_ERROR();
+    JSONTEST_ASSERT(tokenizer->getError() ==
+        "* Line 1, Column 3\n  Bad escape sequence in string\nSee "
+        "Line 1, Column 10 for detail.\n");
+    delete tokenizer;
+}
+
+JSONTEST_FIXTURE(TokenizerTest, tokenizeWithDetailError) {
+    Json::TokenizerBuilder b;
+    Json::Tokenizer* tokenizer(b.newTokenizer());
+    JSONCPP_STRING errs;
+    char const doc[] =
+        "{ \"property\" : \"v\\alue\" }";
+    tokenizer->init(doc, doc + std::strlen(doc));
+    Json::TokenType ttype;
+    JSONTEST_ASSERT_TOKEN_OBJECTBEGIN();
+    JSONTEST_ASSERT_TOKEN_STRING(property);
+    JSONTEST_ASSERT_TOKEN_MEMBERSEPARATOR();
+    // NOTE: It returns a string token but the decode will return an error!!!
+    JSONTEST_ASSERT_TOKEN_STRING_DECODE_ERROR(v\\alue);
+    JSONTEST_ASSERT_TOKEN_OBJECTEND();
+    JSONTEST_ASSERT_TOKEN_ENDOFSTREAM();
+    delete tokenizer;
+}
+
+JSONTEST_FIXTURE(TokenizerTest, tokenizeNVPWithDetailError) {
+    Json::TokenizerBuilder b;
+    Json::Tokenizer* tokenizer(b.newTokenizer());
+    char const doc[] =
+        "{ \"property\" : \"v\\alue\" }";
+    tokenizer->init(doc, doc + std::strlen(doc));
+    JSONCPP_STRING member;
+    Json::TokenType ttype;
+    JSONTEST_ASSERT_NVP_OBJECTBEGIN();
+    JSONTEST_ASSERT_NVP_STRING_MEMBER_VALUE_DECODE_ERROR(property, v\\alue);
+    JSONTEST_ASSERT(tokenizer->getError() ==
+        "* Line 1, Column 16\n  Bad escape sequence in string\nSee "
+        "Line 1, Column 20 for detail.\n");
+    JSONTEST_ASSERT_NVP_OBJECTEND();
+    JSONTEST_ASSERT_NVP_ENDOFSTREAM();
+    delete tokenizer;
+}
+
 struct CharReaderTest : JsonTest::TestCase {};
 
 JSONTEST_FIXTURE(CharReaderTest, parseWithNoErrors) {
@@ -2453,6 +2917,21 @@ int main(int argc, const char* argv[]) {
   JSONTEST_REGISTER_FIXTURE(runner, WriterTest, dropNullPlaceholders);
   JSONTEST_REGISTER_FIXTURE(runner, StreamWriterTest, dropNullPlaceholders);
   JSONTEST_REGISTER_FIXTURE(runner, StreamWriterTest, writeZeroes);
+
+  JSONTEST_REGISTER_FIXTURE(runner, TokenizerTest, tokenizeWithNoErrors);
+  JSONTEST_REGISTER_FIXTURE(runner, TokenizerTest, tokenizeNVPWithNoErrors);
+  JSONTEST_REGISTER_FIXTURE(
+      runner, TokenizerTest, tokenizeWithNoErrorsTestingOffsets);
+  JSONTEST_REGISTER_FIXTURE(
+      runner, TokenizerTest, tokenizeNVPWithNoErrorsTestingOffsets);
+  JSONTEST_REGISTER_FIXTURE(runner, TokenizerTest, tokenizeWithOneError);
+  JSONTEST_REGISTER_FIXTURE(runner, TokenizerTest, tokenizeNVPWithOneError);
+  JSONTEST_REGISTER_FIXTURE(runner, TokenizerTest, tokenizeChineseWithOneError);
+  JSONTEST_REGISTER_FIXTURE(runner, TokenizerTest, tokenizeNVPChineseWithOneError);
+  JSONTEST_REGISTER_FIXTURE(runner, TokenizerTest, tokenizeWithDetailErrorInMember);
+  JSONTEST_REGISTER_FIXTURE(runner, TokenizerTest, tokenizeNVPWithDetailErrorInMember);
+  JSONTEST_REGISTER_FIXTURE(runner, TokenizerTest, tokenizeWithDetailError);
+  JSONTEST_REGISTER_FIXTURE(runner, TokenizerTest, tokenizeNVPWithDetailError);
 
   JSONTEST_REGISTER_FIXTURE(runner, CharReaderTest, parseWithNoErrors);
   JSONTEST_REGISTER_FIXTURE(
