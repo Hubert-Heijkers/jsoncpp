@@ -1108,87 +1108,100 @@ TokenType OurTokenizer::readNVP(JSONCPP_STRING& name)
       reader_.readToken(token_);
     }
   }
-  if (requireSeparator_ == true)
+
+  if (firstNVP_ == true)
   {
     switch (token_.type_) {
-    case tokenArraySeparator:
-      if (firstNVP_ == true) {
-        firstNVP_ = false;
-        reader_.addError(
-            "Unexpected ',' at the beginning of the document, expected '{' or '['.",
-            token_);
-        return token_.type_ = tokenError;
-      }
-      break;
-
-    case tokenObjectEnd:
-      if (isArray_ == true) {
-        reader_.addError(
-            "Unexpected end of object, missing ']'.",
-            token_);
-        return token_.type_ = tokenError;
-      }
-      popIsArray();
-      return token_.type_;
-
-    case tokenArrayEnd:
-      if (isArray_ == false) {
-        reader_.addError(
-            "Unexpected end of array, missing '}'.",
-            token_);
-        return token_.type_ = tokenError;
-      }
-      popIsArray();
-      return token_.type_;
-
-    case tokenEndOfStream:
-    case tokenComment:
-      return token_.type_;
-
     case tokenObjectBegin:
     case tokenArrayBegin:
-      if (firstNVP_ == false) {
-        reader_.addError(
-            (isArray_ == false)?"Missing ',' or '}' in object declaration":"Missing ',' or ']' in array declaration",
-            token_);
-        return token_.type_ = tokenError;
-      }
       firstNVP_ = false;
       requireSeparator_ = false;
       isArray_ = (token_.type_ == tokenArrayBegin);
       return token_.type_;
 
-    case tokenMemberSeparator:
-      // These tokens are not allowed here.
-      reader_.addError(
-          (isArray_ == false)?"Missing ',' or '}' in object declaration":"Missing ',' or ']' in array declaration",
-          token_);
-      return token_.type_ = tokenError;
-
+    case tokenEndOfStream:
+    case tokenComment:
     case tokenError:
-      return token_.type_;
+        return token_.type_;
+
+    case tokenArraySeparator:
+    case tokenMemberSeparator:
+    case tokenObjectEnd:
+    case tokenArrayEnd:
+      // These tokens are not allowed here.
+      if (features_.strictRoot_) {
+        reader_.addError(
+          "A valid JSON document must be either an array or an object value.",
+          token_);
+      }
+      else {
+        reader_.addError(
+          "A valid JSON document must be either an array, an object or value.",
+          token_);
+      }
+      return token_.type_ = tokenError;
 
     default:
       // tokenString, tokenNumber, tokenTrue, tokenFalse, tokenNull, tokenNaN, tokenPosInf, tokenNegInf
-      if (firstNVP_ == true) {
-        if (features_.strictRoot_) {
-          reader_.addError(
-              "A valid JSON document must be either an array or an object value.",
-              token_);
-          return token_.type_ = tokenError;
+      if (features_.strictRoot_) {
+        reader_.addError(
+          "A valid JSON document must be either an array or an object value.",
+          token_);
+        return token_.type_ = tokenError;
+      }
+      firstNVP_ = false;
+      return token_.type_;
+    }
+  }
+  else if (requireSeparator_ == true)
+  {
+    if (token_.type_ != tokenArraySeparator)
+    {
+      switch (token_.type_) {
+      case tokenObjectEnd:
+        if (isArray_ == false) {
+          popIsArray();
+          return token_.type_;
         }
-        firstNVP_ = false;
+
+      case tokenArrayEnd:
+        if (isArray_ == true) {
+          popIsArray();
+          return token_.type_;
+        }
+
+      case tokenEndOfStream:
+      case tokenComment:
+      case tokenError:
         return token_.type_;
       }
-      // These tokens are not allowed here.
+
+      // All other tokens are not allowed here.
       reader_.addError(
-          (isArray_ == false)?"Missing ',' or '}' in object declaration":"Missing ',' or ']' in array declaration",
-          token_);
+        (isArray_ == true)?"Syntax error: separator ',' or array end ']' expected.":"Syntax error: separator ',' or object end '}' expected.",
+        token_);
       return token_.type_ = tokenError;
     }
     reader_.readToken(token_);
-  } else {
+  } 
+  else {
     requireSeparator_ = true;
+
+    switch (token_.type_) {
+    case tokenObjectEnd:
+      // Empty object!
+      if (isArray_ == false) {
+        popIsArray();
+        return token_.type_;
+      }
+
+    case tokenArrayEnd:
+      // Empty array!
+      if (isArray_ == true) {
+        popIsArray();
+        return token_.type_;
+      }
+    }
   }
 
   switch (token_.type_) {
@@ -1198,10 +1211,8 @@ TokenType OurTokenizer::readNVP(JSONCPP_STRING& name)
         token_);
     return token_.type_ = tokenError;
 
-  case tokenError:
-    return token_.type_;
-
   case tokenComment:
+  case tokenError:
     return token_.type_;
   }
 
